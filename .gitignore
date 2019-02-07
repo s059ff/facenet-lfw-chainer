@@ -117,6 +117,5 @@ dmypy.json
 # Visual Studio Code settings
 .vscode
 
-##
-dataset/
+# Temporary files
 temp/

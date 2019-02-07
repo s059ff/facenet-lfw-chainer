@@ -24,6 +24,5 @@ class FaceNet(chainer.Chain):
         h = F.max_pooling_2d(F.relu(self.bn2(self.conv2(h))), (2, 2))
         h = F.max_pooling_2d(F.relu(self.bn3(self.conv3(h))), (2, 2))
         h = F.max_pooling_2d(F.relu(self.bn4(self.conv4(h))), (2, 2))
-        h = self.fc5(h)
-        h = F.normalize(h)
+        h = F.normalize(self.fc5(h))
         return h

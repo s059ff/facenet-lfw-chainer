@@ -1,28 +1,78 @@
-import cupy as xp
+import chainer
 import chainer.functions as F
+import cupy as xp
 
 
 def _pairwise_distances(embeddings):
+    """Compute the 2D matrix of distances between all the embeddings.
+
+    Args:
+        embeddings: Variable with shape=(batch_size, embed_dim)
+
+    Returns:
+        pairwise_distances: Variable with shape=(batch_size, batch_size)
+    """
     dot = F.matmul(embeddings, embeddings, transa=False, transb=True)
     squared_norm = F.diagonal(dot)
-    distances = F.expand_dims(squared_norm, axis=0) - 2.0 * dot + F.expand_dims(squared_norm, axis=1)
-    return distances
+    pairwise_distances = F.expand_dims(squared_norm, axis=0) - 2.0 * dot + F.expand_dims(squared_norm, axis=1)
+    return pairwise_distances
 
 
 def _get_anchor_positive_triplet_mask(labels):
-    return xp.where(xp.expand_dims(labels, axis=0) == xp.expand_dims(labels, axis=1), 1.0, 0.0)
+    """Return a 2D mask where mask[a, p] is True iff a and p are distinct and have same label.
+
+    Args:
+        labels: xp.array with shape=(batch_size)
+
+    Returns:
+        mask: xp.array with shape=(batch_size, batch_size), dtype=xp.bool
+    """
+    return (xp.expand_dims(labels, axis=0) == xp.expand_dims(labels, axis=1)) & xp.logical_not(xp.diag(xp.ones(labels.size, dtype=xp.bool)))
 
 
 def _get_anchor_negative_triplet_mask(labels):
-    return xp.where(xp.expand_dims(labels, axis=0) != xp.expand_dims(labels, axis=1), 1.0, 0.0)
+    """Return a 2D mask where mask[a, n] is True iff a and n have distinct labels.
+
+    Args:
+        labels: xp.array with shape=(batch_size)
+
+    Returns:
+        mask: xp.array with shape=(batch_size, batch_size), dtype=xp.bool
+    """
+    return xp.expand_dims(labels, axis=0) != xp.expand_dims(labels, axis=1)
 
 
 def _get_triplet_mask(labels):
-    conditions = xp.expand_dims(labels, axis=0) == xp.expand_dims(labels, axis=1)
-    return xp.expand_dims(xp.where(conditions, 1.0, 0.0), axis=2) * xp.expand_dims(xp.where(conditions, 0.0, 1.0), axis=1)
+    """Return a 3D mask where mask[a, p, n] is True iff the triplet (a, p, n) is valid.
+
+    A triplet (i, j, k) is valid if:
+        - i, j, k are distinct
+        - labels[i] == labels[j] and labels[i] != labels[k]
+
+    Args:
+        labels: xp.array with shape=(batch_size)
+
+    Returns:
+        mask: xp.array with shape=(batch_size, batch_size, batch_size), dtype=xp.bool
+    """
+    mask1 = _get_anchor_positive_triplet_mask(labels)
+    mask2 = _get_anchor_negative_triplet_mask(labels)
+    return xp.expand_dims(mask1, axis=2) * xp.expand_dims(mask2, axis=1)
 
 
 def batch_all_triplet_loss(embeddings, labels, margin=0.2):
+    """Build the triplet loss over a batch of embeddings.
+
+    We generate all the valid triplets and average the loss over the positive ones.
+
+    Args:
+        embeddings: Variable of shape=(batch_size, embed_dim)
+        labels: labels of the batch, of size=(batch_size,)
+        margin: margin for triplet loss
+
+    Returns:
+        triplet_loss: scalar Variable containing the triplet loss
+    """
     pairwise_dist = _pairwise_distances(embeddings)
     anchor_positive_dist = F.expand_dims(pairwise_dist, axis=2)
     anchor_negative_dist = F.expand_dims(pairwise_dist, axis=1)
@@ -32,64 +82,43 @@ def batch_all_triplet_loss(embeddings, labels, margin=0.2):
     triplet_loss = mask * triplet_loss
 
     triplet_loss = F.relu(triplet_loss)
-    num_positive_triplets = xp.count_nonzero(triplet_loss.data) + 1e-9
 
-    return F.sum(triplet_loss) / num_positive_triplets
+    total = F.sum(triplet_loss)
+    count = xp.count_nonzero(triplet_loss.data)
+    return total / count if (count > 0.0) else chainer.Variable(xp.array(0.0, dtype=xp.float32))
 
 
 def validation_rate(embeddings, labels, threshold=0.2):
+    """ Calculate varidation rate metrics over a batch of embeddings.
+
+    Args:
+        embeddings: tensor with shape=(batch_size, embed_dim)
+        labels: labels of the batch, with shape=(batch_size,)
+        threshold: distance threshold decided two vector is close, scalar and positive
+
+    Returns:
+        triplet_loss: scalar Variable containing the triplet loss
+    """
     mask = _get_anchor_positive_triplet_mask(labels)
-    distances = _pairwise_distances(embeddings).data
-    return xp.sum((distances < threshold) & (mask == 1)), xp.sum(mask)
+    pairwise_distances = _pairwise_distances(embeddings).data
+    numer = xp.sum((pairwise_distances < threshold) & mask)
+    denom = xp.sum(mask)
+    return numer / denom if (denom > 0.0) else 0.0
 
 
 def false_accept_rate(embeddings, labels, threshold=0.2):
+    """ Calculate false accept rate over a batch of embeddings.
+
+    Args:
+        embeddings: tensor with shape=(batch_size, embed_dim)
+        labels: labels of the batch, with shape=(batch_size,)
+        threshold: distance threshold decided two vector is close, scalar and positive
+
+    Returns:
+        triplet_loss: scalar Variable containing the triplet loss
+    """
     mask = _get_anchor_negative_triplet_mask(labels)
-    distances = _pairwise_distances(embeddings).data
-    return xp.sum((distances < threshold) & (mask == 1)), xp.sum(mask)
-
-
-if __name__ == "__main__":
-
-    # Check if mask of triplet loss is correctly.
-    labels = xp.array([0, 1, 1, 0], xp.int)
-    mask = _get_triplet_mask(labels)
-    expected = xp.zeros_like(mask, dtype=xp.float)
-    for i in range(len(labels)):
-        for j in range(len(labels)):
-            for k in range(len(labels)):
-                if labels[i] == labels[j] and labels[i] != labels[k]:
-                    expected[i, j, k] = 1.
-    assert (mask == expected).all()
-
-    # Check if triplet loss decrease.
-    # Check if VAL metrics increase.
-    # Check if FAR metrics decrease.
-    embeddings = xp.array([[0.0, 0.0], [1.0, 1.0], [0.2, 0.2], [0.4, 0.4]], xp.float)
-    loss1 = batch_all_triplet_loss(embeddings, labels, 0.0)
-    numer, denom = validation_rate(embeddings, labels)
-    val1 = numer / denom
-    numer, denom = false_accept_rate(embeddings, labels)
-    far1 = numer / denom
-
-    embeddings = xp.array([[0.0, 0.0], [1.0, 1.0], [0.4, 0.4], [0.1, 0.1]], xp.float)
-    loss2 = batch_all_triplet_loss(embeddings, labels, 0.0)
-    numer, denom = validation_rate(embeddings, labels)
-    val2 = numer / denom
-    numer, denom = false_accept_rate(embeddings, labels)
-    far2 = numer / denom
-
-    embeddings = xp.array([[0.0, 0.0], [1.0, 1.0], [1.0, 1.0], [0.0, 0.0]], xp.float)
-    loss3 = batch_all_triplet_loss(embeddings, labels, 0.0)
-    numer, denom = validation_rate(embeddings, labels)
-    val3 = numer / denom
-    numer, denom = false_accept_rate(embeddings, labels)
-    far3 = numer / denom
-
-    print(loss1, loss2, loss3)
-    print(val1, val2, val3)
-    print(far1, far2, far3)
-
-    assert loss1.data >= loss2.data and loss2.data >= loss3.data
-    assert val1 <= val2 and val2 <= val3
-    assert far1 >= far2 and far2 >= far3
+    pairwise_distances = _pairwise_distances(embeddings).data
+    numer = xp.sum((pairwise_distances < threshold) & mask)
+    denom = xp.sum(mask)
+    return numer / denom if (denom > 0.0) else 0.0

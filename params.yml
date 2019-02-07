@@ -1,0 +1,14 @@
+# An epoch is one forward pass and one backward pass of all training examples.
+epochs: 100
+
+# Interval of saving neural network model to filesystem. The unit is epoch.
+checkpoint_interval: 10
+
+# The number of training examples to use per one epoch.
+batch_size: 100
+
+# GPU device ID to use. If minus value, will not use any GPU device (CPU is only used).
+gpu: 0
+
+# The memory storage to store all training examples. "cpu" or "gpu".
+memory: "cpu"
