@@ -114,5 +114,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Visual Studio Code settings
+.vs
+
 ##
+dataset/
 temp/
