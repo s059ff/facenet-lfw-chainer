@@ -1,0 +1,7 @@
+{
+    "epochs": 100,
+    "checkpoint_interval": 10,
+    "batch_size": 500,
+    "gpu": 0,
+    "memory": "cpu"
+}
