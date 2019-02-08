@@ -1,9 +1,12 @@
+import copy
 import datetime
 import os
 import shutil
 
 import chainer
+import chainer.cuda
 import cupy as cp
+import numpy as np
 import yaml
 from chainer.dataset.convert import concat_examples
 from chainer.iterators import SerialIterator
@@ -15,25 +18,6 @@ from chainer.training.updaters import StandardUpdater
 
 import functions
 from model import FaceNet
-
-
-class Classifier(chainer.Chain):
-    def __init__(self, predictor):
-        super(Classifier, self).__init__()
-
-        with self.init_scope():
-            self.predictor = predictor
-
-    def forward(self, *args, **kwargs):
-        batch, labels = args
-        embeddings = self.predictor(batch)
-        loss = functions.batch_all_triplet_loss(embeddings, labels)
-        chainer.reporter.report({
-            'loss': loss,
-            'VAL': functions.validation_rate(embeddings, labels),
-            'FAR': functions.false_accept_rate(embeddings, labels)
-        }, self)
-        return loss
 
 
 def main():
@@ -49,6 +33,25 @@ def main():
         val = [(cp.array(x), cp.array(y)) for x, y in val]
 
     # Prepare model.
+    class Classifier(chainer.Chain):
+
+        def __init__(self, predictor):
+            super(Classifier, self).__init__()
+
+            with self.init_scope():
+                self.predictor = predictor
+
+        def forward(self, *args, **kwargs):
+            batch, labels = args
+            embeddings = self.predictor(batch)
+            loss = functions.batch_all_triplet_loss(embeddings, labels)
+            chainer.reporter.report({
+                'loss': loss,
+                'VAL': functions.validation_rate(embeddings, labels),
+                'FAR': functions.false_accept_rate(embeddings, labels)
+            }, self)
+            return loss
+
     predictor = FaceNet()
     model = Classifier(predictor)
     if 0 <= args['gpu']:
@@ -71,6 +74,33 @@ def main():
             return concat_examples([(cp.array(x), cp.array(y)) for x, y in batch], device=device, padding=padding)
     else:
         converter = concat_examples
+
+    class DumpEmbeddings(chainer.training.extension.Extension):
+        def __init__(self, iterator, model, converter, filename):
+            self.iterator = iterator
+            self.model = model
+            self.converter = converter
+            self.filename = filename
+            self.xp = cp if 0 <= args["gpu"] else np
+
+        def __call__(self, trainer):
+            if hasattr(self.iterator, 'reset'):
+                self.iterator.reset()
+                it = self.iterator
+            else:
+                it = copy.copy(self.iterator)
+
+            def forward(batch):
+                x, _ = self.converter(batch)
+                y = self.model.predictor(x)
+                embeddings = y.data
+                if 0 <= args["gpu"]:
+                    embeddings = chainer.backends.cuda.to_cpu(embeddings)
+                return embeddings
+
+            embeddings = np.vstack([forward(batch) for batch in it])
+            np.save(os.path.join(trainer.out, self.filename.format(trainer)), embeddings)
+
     train_iter = SerialIterator(train, args['batch_size'])
     test_iter = SerialIterator(val, args['batch_size'], repeat=False, shuffle=False)
     updater = StandardUpdater(train_iter, optimizer, converter=converter)
@@ -87,6 +117,7 @@ def main():
                                 'main/VAL', 'validation/main/VAL',
                                 'main/FAR', 'validation/main/FAR',
                                 'elapsed_time']))
+    trainer.extend(DumpEmbeddings(test_iter, model, converter=converter, filename='embeddings-{.updater.epoch}.npy'), trigger=(args['checkpoint_interval'], 'epoch'))
     trainer.extend(ProgressBar(update_interval=1))
 
     # Execute training.
