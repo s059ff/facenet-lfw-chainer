@@ -22,8 +22,9 @@ def main():
     embeddings = np.load(args.source)
 
     # Compress each embeddings to 2 dimension using PCA.
-    pca = PCA()
-    pca.fit(embeddings)
+    if 2 < embeddings.shape[1]:
+        pca = PCA(n_components=2)
+        pca.fit(embeddings)
 
     # Load label data.
     _, val = chainer.datasets.get_mnist(ndim=3)
