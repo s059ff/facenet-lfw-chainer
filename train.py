@@ -1,11 +1,10 @@
 import datetime
 import os
 import shutil
-import yaml
-from types import SimpleNamespace as Namespace
 
 import chainer
 import cupy as cp
+import yaml
 from chainer.dataset.convert import concat_examples
 from chainer.iterators import SerialIterator
 from chainer.training import Trainer
@@ -45,6 +44,9 @@ def main():
 
     # Prepare training data.
     train, val = chainer.datasets.get_mnist(ndim=3)
+    if args['memory'] == 'gpu' and 0 <= args['gpu']:
+        train = [(cp.array(x), cp.array(y)) for x, y in train]
+        val = [(cp.array(x), cp.array(y)) for x, y in val]
 
     # Prepare model.
     predictor = FaceNet()
@@ -57,18 +59,18 @@ def main():
     optimizer = chainer.optimizers.AdaDelta()
     optimizer.setup(model)
 
-    # Training.
+    # Make output directory.
     timestamp = f'{datetime.datetime.now():%Y%m%d%H%M%S}'
     directory = f'./temp/{timestamp}/'
     os.makedirs(directory, exist_ok=True)
     shutil.copy('params.yml', f'{directory}params.yml')
 
+    # Prepare extensions.
     if args['memory'] == 'cpu' and 0 <= args['gpu']:
         def converter(batch, device=None, padding=None):
             return concat_examples([(cp.array(x), cp.array(y)) for x, y in batch], device=device, padding=padding)
     else:
         converter = concat_examples
-
     train_iter = SerialIterator(train, args['batch_size'])
     test_iter = SerialIterator(val, args['batch_size'], repeat=False, shuffle=False)
     updater = StandardUpdater(train_iter, optimizer, converter=converter)
@@ -86,6 +88,8 @@ def main():
                                 'main/FAR', 'validation/main/FAR',
                                 'elapsed_time']))
     trainer.extend(ProgressBar(update_interval=1))
+
+    # Execute training.
     trainer.run()
 
 

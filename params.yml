@@ -11,4 +11,4 @@ batch_size: 100
 gpu: 0
 
 # The memory storage to store all training examples. "cpu" or "gpu".
-memory: "cpu"
+memory: "gpu"
