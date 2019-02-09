@@ -1,6 +1,8 @@
-import functions
 import unittest
+
 import cupy as xp
+
+import functions
 
 
 class TestFunctions(unittest.TestCase):
