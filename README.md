@@ -23,7 +23,7 @@ MNIST データセットを使用した FaceNet による手書き数字画像�
 * クラスタリング結果 サンプル間類似度(距離) 可視化
 
     ```bash
-    python visualize_distances.py -s (モデルのトレーニングで作成された embeddings-*.npy のパス)
+    python visualize_distances.py -s (モデルのトレーニングで作成された embeddings-*.npy のパス) -d (距離の定義, l2 もしくは cos のどちらか)
     ```
 
 ## 実行結果

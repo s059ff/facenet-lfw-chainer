@@ -3,8 +3,10 @@ import chainer.functions as F
 import cupy as xp
 
 
-def _pairwise_distances(embeddings):
+def _pairwise_distances_l2(embeddings):
     """Compute the 2D matrix of distances between all the embeddings.
+
+    Distance is defined by L2 norm: distance(x, y) := ||x - y||^2
 
     Args:
         embeddings: Variable with shape=(batch_size, embed_dim)
@@ -12,6 +14,9 @@ def _pairwise_distances(embeddings):
     Returns:
         pairwise_distances: Variable with shape=(batch_size, batch_size)
     """
+    # Multiply 0.5 to embeddings because constrain distance in [0.0, 1.0].
+    embeddings = 0.5 * embeddings
+
     # Get the dot product between all embeddings
     # shape (batch_size, batch_size)
     dot_product = F.matmul(embeddings, embeddings, transa=False, transb=True)
@@ -27,9 +32,52 @@ def _pairwise_distances(embeddings):
     distances = F.expand_dims(squared_norm, axis=0) - 2.0 * dot_product + F.expand_dims(squared_norm, axis=1)
 
     # Because of computation errors, some distances might be negative so we put everything >= 0.0
-    distances = F.relu(distances)
+    distances = F.clip(distances, 0.0, 1.0)
 
     return distances
+
+
+def _pairwise_distances_cos(embeddings):
+    """Compute the 2D matrix of distances between all the embeddings.
+
+    Distance is defined by cosine similarity: distance(x, y) := (1 - cos(theta)) / 2 = (1 - dot(x, y)) / 2
+
+    Args:
+        embeddings: Variable with shape=(batch_size, embed_dim)
+
+    Returns:
+        pairwise_distances: Variable with shape=(batch_size, batch_size)
+    """
+    # Get the dot product between all embeddings
+    # shape (batch_size, batch_size)
+    dot_product = F.matmul(embeddings, embeddings, transa=False, transb=True)
+
+    # Compute the pairwise distance matrix
+    distances = (1.0 - dot_product) * 0.5
+
+    # Because of computation errors, some distances might be negative so we put everything >= 0.0
+    distances = F.clip(distances, 0.0, 1.0)
+
+    return distances
+
+
+def _pairwise_distances(embeddings, dist_type):
+    """Compute the 2D matrix of distances between all the embeddings.
+
+    If dist_type is 'l2', returns squared euclidean distance. distnace(a, b) := ||f(a) - f(b)||^2
+    If dist_type is 'cos', returns distance computed by cosine similarity. distance(a, b) := (1 - cos(a, b)) / 2)
+
+    Args:
+        embeddings: Variable with shape=(batch_size, embed_dim)
+        dist_type: definition of distance, 'l2' or 'cos'
+
+    Returns:
+        pairwise_distances: Variable with shape=(batch_size, batch_size)
+    """
+    return {
+        'l2': _pairwise_distances_l2,
+        'cos': _pairwise_distances_cos
+    }[dist_type](embeddings)
 
 
 def _get_anchor_positive_triplet_mask(labels):
@@ -95,7 +143,7 @@ def _get_triplet_mask(labels):
     return xp.expand_dims(positive_triplet_mask, axis=2) * xp.expand_dims(negative_triplet_mask, axis=1)
 
 
-def batch_all_triplet_loss(embeddings, labels, margin=0.2):
+def batch_all_triplet_loss(embeddings, labels, margin=0.2, dist_type='l2'):
     """Build the triplet loss over a batch of embeddings.
 
     We generate all the valid triplets and average the loss over the positive ones.
@@ -104,12 +152,13 @@ def batch_all_triplet_loss(embeddings, labels, margin=0.2):
         embeddings: Variable of shape=(batch_size, embed_dim)
         labels: labels of the batch, of size=(batch_size,)
         margin: margin for triplet loss
+        dist_type: definition of distance, 'l2' or 'cos'
 
     Returns:
         triplet_loss: scalar Variable containing the triplet loss
     """
-    # ||f(xa) - f(xp)||^2 - |f(xa) - f(xn)||^2 + alpha
-    pairwise_dist = _pairwise_distances(embeddings)
+    # distance(f(xa), f(xp)) - distance(f(xa), f(xn)) + alpha
+    pairwise_dist = _pairwise_distances(embeddings, dist_type)
     anchor_positive_dist = F.expand_dims(pairwise_dist, axis=2)
     anchor_negative_dist = F.expand_dims(pairwise_dist, axis=1)
     triplet_loss = anchor_positive_dist - anchor_negative_dist + margin
@@ -127,37 +176,39 @@ def batch_all_triplet_loss(embeddings, labels, margin=0.2):
     return total / count if (count > 0.0) else chainer.Variable(xp.array(0.0, dtype=xp.float32))
 
 
-def validation_rate(embeddings, labels, threshold=0.2):
+def validation_rate(embeddings, labels, threshold=0.2, dist_type='l2'):
     """ Calculate varidation rate metrics over a batch of embeddings.
 
     Args:
         embeddings: tensor with shape=(batch_size, embed_dim)
         labels: labels of the batch, with shape=(batch_size,)
         threshold: distance threshold decided two vector is close, scalar and positive
+        dist_type: definition of distance, 'l2' or 'cos'
 
     Returns:
         triplet_loss: scalar Variable containing the triplet loss
     """
     mask = _get_anchor_positive_triplet_mask(labels)
-    pairwise_distances = _pairwise_distances(embeddings).data
+    pairwise_distances = _pairwise_distances(embeddings, dist_type=dist_type).data
     numer = xp.sum((pairwise_distances < threshold) & mask)
     denom = xp.sum(mask)
     return numer / denom if (denom > 0.0) else 0.0
 
 
-def false_accept_rate(embeddings, labels, threshold=0.2):
+def false_accept_rate(embeddings, labels, threshold=0.2, dist_type='l2'):
     """ Calculate false accept rate over a batch of embeddings.
 
     Args:
         embeddings: tensor with shape=(batch_size, embed_dim)
         labels: labels of the batch, with shape=(batch_size,)
         threshold: distance threshold decided two vector is close, scalar and positive
+        dist_type: definition of distance, 'l2' or 'cos'
 
     Returns:
         triplet_loss: scalar Variable containing the triplet loss
     """
     mask = _get_anchor_negative_triplet_mask(labels)
-    pairwise_distances = _pairwise_distances(embeddings).data
+    pairwise_distances = _pairwise_distances(embeddings, dist_type=dist_type).data
     numer = xp.sum((pairwise_distances < threshold) & mask)
     denom = xp.sum(mask)
     return numer / denom if (denom > 0.0) else 0.0

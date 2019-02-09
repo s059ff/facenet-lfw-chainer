@@ -41,14 +41,13 @@ def main():
             with self.init_scope():
                 self.predictor = predictor
 
-        def forward(self, *args, **kwargs):
-            batch, labels = args
+        def forward(self, batch, labels):
             embeddings = self.predictor(batch)
-            loss = functions.batch_all_triplet_loss(embeddings, labels)
+            loss = functions.batch_all_triplet_loss(embeddings, labels, margin=args['margin'], dist_type=args['dist_type'])
             chainer.reporter.report({
                 'loss': loss,
-                'VAL': functions.validation_rate(embeddings, labels),
-                'FAR': functions.false_accept_rate(embeddings, labels)
+                'VAL': functions.validation_rate(embeddings, labels, threshold=args['threshold'], dist_type=args['dist_type']),
+                'FAR': functions.false_accept_rate(embeddings, labels, threshold=args['threshold'], dist_type=args['dist_type'])
             }, self)
             return loss
 
@@ -81,7 +80,7 @@ def main():
             self.model = model
             self.converter = converter
             self.filename = filename
-            self.xp = cp if 0 <= args["gpu"] else np
+            self.xp = cp if 0 <= args['gpu'] else np
 
         def __call__(self, trainer):
             if hasattr(self.iterator, 'reset'):
@@ -94,7 +93,7 @@ def main():
                 x, _ = self.converter(batch)
                 y = self.model.predictor(x)
                 embeddings = y.data
-                if 0 <= args["gpu"]:
+                if 0 <= args['gpu']:
                     embeddings = chainer.backends.cuda.to_cpu(embeddings)
                 return embeddings
 
@@ -117,7 +116,8 @@ def main():
                                 'main/VAL', 'validation/main/VAL',
                                 'main/FAR', 'validation/main/FAR',
                                 'elapsed_time']))
-    trainer.extend(DumpEmbeddings(test_iter, model, converter=converter, filename='embeddings-{.updater.epoch}.npy'), trigger=(args['checkpoint_interval'], 'epoch'))
+    trainer.extend(DumpEmbeddings(test_iter, model, converter=converter,
+                                  filename='embeddings-{.updater.epoch}.npy'), trigger=(args['checkpoint_interval'], 'epoch'))
     trainer.extend(ProgressBar(update_interval=1))
 
     # Execute training.

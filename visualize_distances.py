@@ -18,6 +18,10 @@ def main():
         'help': 'The embeddings.npy file path.',
         'required': True
     })
+    parser.add_argument('-d', '--dist_type', **{
+        'type': str,
+        'required': True
+    })
     args = parser.parse_args()
 
     # Load embeddings file.
@@ -33,6 +37,7 @@ def main():
     batches = np.array([x for x, y in val])
     labels = np.array([y for x, y in val])
 
+    np.random.seed(0x12345)
     indices = np.ravel([np.random.choice(np.ravel(np.argwhere(labels == i)), size=3) for i in range(10)])
     titles = [f'{i}-{j + 1}' for i in range(10) for j in range(3)]
 
@@ -49,7 +54,7 @@ def main():
     head, ext = os.path.splitext(args.source)
     plt.savefig(f'{head}-choices.png')
 
-    pairwise_distances = functions._pairwise_distances(embeddings[indices]).data
+    pairwise_distances = functions._pairwise_distances(embeddings[indices], dist_type=args.dist_type).data
     np.savetxt(f'{head}-distances.txt', pairwise_distances, fmt='%.2f')
     plt.close()
 
@@ -57,6 +62,7 @@ def main():
     plt.xticks(np.arange(0, 30 + 1, 1), labels=titles, rotation=-90)
     plt.yticks(np.arange(0, 30 + 1, 1), labels=titles)
     plt.savefig(f'{head}-distances.png')
+
 
 if __name__ == '__main__':
     main()

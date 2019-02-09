@@ -12,3 +12,12 @@ gpu: 0
 
 # The memory storage to store all training examples. "cpu" or "gpu".
 memory: "cpu"
+
+# The scalar value added to triplet loss. This must be greater than 0.
+margin: 0.2
+
+# The scalar value used by computing VAR/FAR metrics. This must be greater than 0.
+threshold: 0.2
+
+# Definition of distance used when calculates distance of two embedding vector.
+dist_type: "l2"
