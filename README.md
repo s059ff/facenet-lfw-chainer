@@ -32,7 +32,7 @@ MNIST データセットを使用した FaceNet による手書き数字画像�
 
 ![](https://github.com/s059ff/facenet-mnist-chainer/blob/master/examples/embeddings-100.png)
 
-* サンプル間距離 推定 結果
+* サンプル間距離 推定 結果  
 validation データからランダムに抽出したデータ, それらのデータ間の距離  
 
 ![](https://github.com/s059ff/facenet-mnist-chainer/blob/master/examples/embeddings-100-choices.png)
