@@ -27,13 +27,13 @@ MNIST データセットを使用した FaceNet による手書き数字画像�
     ```
 
 ## 実行結果
-* クラスタリング結果
-    すべての validation データの FaceNet による 28x28(=768) => 128 次元への特徴抽出 => PCA により 2 次元へ圧縮したもの
+* クラスタリング結果  
+すべての validation データの FaceNet による 28x28(=768) => 128 次元への特徴抽出 => PCA により 2 次元へ圧縮したもの  
 
-    ![](https://github.com/s059ff/facenet-mnist-chainer/blob/master/examples/embeddings-100.png)
+![](https://github.com/s059ff/facenet-mnist-chainer/blob/master/examples/embeddings-100.png)
 
 * サンプル間距離 推定 結果
-    validation データからランダムに抽出したデータ, それらのデータ間の距離
+validation データからランダムに抽出したデータ, それらのデータ間の距離  
 
-    ![](https://github.com/s059ff/facenet-mnist-chainer/blob/master/examples/embeddings-100-choices.png)
-    ![](https://github.com/s059ff/facenet-mnist-chainer/blob/master/examples/embeddings-100-distances.png)
+![](https://github.com/s059ff/facenet-mnist-chainer/blob/master/examples/embeddings-100-choices.png)
+![](https://github.com/s059ff/facenet-mnist-chainer/blob/master/examples/embeddings-100-distances.png)
