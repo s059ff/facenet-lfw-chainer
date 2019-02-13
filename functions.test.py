@@ -17,10 +17,10 @@ class TestFunctions(unittest.TestCase):
                     if i != j and labels[i] == labels[j] and labels[i] != labels[k]:
                         expected[i, j, k] = True
         self.assertSequenceEqual(mask.tolist(), expected.tolist())
-    
+
     def test_triplet_loss_l2(self):
         self._test_triplet_loss(dist_type='l2')
-    
+
     def test_triplet_loss_cos(self):
         self._test_triplet_loss(dist_type='cos')
 
