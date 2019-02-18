@@ -1,5 +1,6 @@
 import argparse
 import os
+import itertools
 
 import chainer
 import matplotlib.pyplot as plt
@@ -39,29 +40,37 @@ def main():
 
     np.random.seed(0x12345)
     indices = np.ravel([np.random.choice(np.ravel(np.argwhere(labels == i)), size=3) for i in range(10)])
-    titles = [f'{i}-{j + 1}' for i in range(10) for j in range(3)]
 
-    for i, title, index in zip(range(len(indices)), titles, indices):
-        batch = batches[index]
-        plt.subplot(5, 6, (i + 1))
-        plt.subplots_adjust(hspace=0.5)
-        plt.imshow(np.reshape(batch, (28, 28)))
-        plt.gray()
-        plt.title(title, pad=2.0)
-        plt.xticks(color=str(None))
-        plt.yticks(color=str(None))
-        plt.tick_params(length=0)
     head, ext = os.path.splitext(args.source)
-    plt.savefig(f'{head}-choices.png')
 
     pairwise_distances = functions._pairwise_distances(embeddings[indices], dist_type=args.dist_type).data
     np.savetxt(f'{head}-distances.txt', pairwise_distances, fmt='%.2f')
-    plt.close()
 
-    plt.imshow(pairwise_distances)
-    plt.xticks(np.arange(0, 30 + 1, 1), labels=titles, rotation=-90)
-    plt.yticks(np.arange(0, 30 + 1, 1), labels=titles)
+    fig, axes = plt.subplots(31, 31, figsize=(20, 20))
+    plt.subplots_adjust(wspace=0.0, hspace=0.0)
+    plt.gray()
+
+    ax = axes[0, 0]
+    ax.axis('off')
+    ax.imshow(np.array([[0]]))
+
+    # Title row
+    for i, index in zip(range(30), indices):
+        batch = batches[index]
+        ax = axes[i + 1, 0]
+        ax.axis('off')
+        ax.imshow(batch.reshape((28, 28)), vmin=0.0, vmax=1.0)
+        ax = axes[0, i + 1]
+        ax.axis('off')
+        ax.imshow(batch.reshape((28, 28)), vmin=0.0, vmax=1.0)
+
+    for i, j in itertools.product(range(30), range(30)):
+        value = np.array([[pairwise_distances[i, j]]])
+        ax = axes[i + 1, j + 1]
+        ax.axis('off')
+        ax.imshow(value, vmin=0.0, vmax=1.0)
     plt.savefig(f'{head}-distances.png')
+    plt.close()
 
 
 if __name__ == '__main__':
