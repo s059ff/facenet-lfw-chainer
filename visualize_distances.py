@@ -51,23 +51,21 @@ def main():
     plt.gray()
 
     ax = axes[0, 0]
-    ax.axis('off')
-    ax.imshow(np.array([[0]]))
+    ax.set_xticks([]), ax.set_yticks([])
 
-    # Title row
     for i, index in zip(range(30), indices):
         batch = batches[index]
         ax = axes[i + 1, 0]
-        ax.axis('off')
+        ax.set_xticks([]), ax.set_yticks([])
         ax.imshow(batch.reshape((28, 28)), vmin=0.0, vmax=1.0)
         ax = axes[0, i + 1]
-        ax.axis('off')
+        ax.set_xticks([]), ax.set_yticks([])
         ax.imshow(batch.reshape((28, 28)), vmin=0.0, vmax=1.0)
 
     for i, j in itertools.product(range(30), range(30)):
         value = np.array([[pairwise_distances[i, j]]])
         ax = axes[i + 1, j + 1]
-        ax.axis('off')
+        ax.set_xticks([]), ax.set_yticks([])
         ax.imshow(value, vmin=0.0, vmax=1.0)
     plt.savefig(f'{head}-distances.png')
     plt.close()
